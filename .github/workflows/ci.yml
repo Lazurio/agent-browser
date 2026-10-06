@@ -149,8 +149,8 @@ jobs:
             target: aarch64-apple-darwin
           - os: macos-latest
             target: x86_64-apple-darwin
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
+          # Lazurio: the distribution ships linux-x64 and darwin-arm64, never
+          # Windows; the Windows jobs run in vercel-labs/agent-browser only.
 
     steps:
       - name: Checkout repository
@@ -198,7 +198,7 @@ jobs:
 
   windows-integration:
     name: Windows Integration Test
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.repository == 'vercel-labs/agent-browser'
     runs-on: windows-latest
     needs: rust-cross
 
