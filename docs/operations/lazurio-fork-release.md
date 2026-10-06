@@ -37,6 +37,7 @@ kterou Machines nasazovaly před forkem.
 | `fix(dashboard): serve the SPA shell as HTML when the request carries a query` (cherry-pick vercel-labs/agent-browser#2046) | Dashboard servíroval `/?port=…` jako `application/octet-stream` | Odkaz na okno vlákna (`/?port=<stream>`) se v prohlížeči stáhl místo otevřel; LazurioPlatform to obchází parametrem `view=.html` | Až upstream #2046 vydá; obejití v Platformě pak může odejít |
 | `chore(lazurio): allow clippy::double_must_use on BrowserBackend, as upstream main does` | Dva řádky z upstream `main` (vercel-labs/agent-browser@63df443): současný stabilní clippy odmítá `#[must_use]`, které `async_trait` přidává k metodám `BrowserBackend` | Upstreamové CI (clippy s `-D warnings` na nejnovějším stabilním Rustu) by jinak na bázi v0.37.0 neprošlo | Až distribuce přejde na upstream vydání, které ty řádky obsahuje |
 | `ci(lazurio): the CI of the shipped targets` | Upstreamové CI ve forku netestuje Windows (matice `rust-cross` bez `windows-latest`, `windows-integration` jen ve `vercel-labs/agent-browser`) | Distribuce vydává jen linux-x64 a darwin-arm64; upstreamový job `Rust (windows-latest)` dnes běží až do zrušení po 6 hodinách | Až distribuce začne vydávat Windows, nebo upstream job opraví |
+| `test(lazurio): serve the snapshot-and-click e2e page locally` | `native::e2e_tests::e2e_snapshot_and_click_ref` četl nadpis a odkaz `example.com`; ten je už nemá a sám žádá, aby se na něj testy nespoléhaly. Test teď jeho dřívější stránku servíruje lokálně | Bez toho by candidate CI nebylo zelené (stejně padá i upstream `main`, běh 37409607028) | Až upstream test opraví |
 | `chore(lazurio): distribution version …` | Verze `X.Y.Z-lazurio.N` všude, kde ji upstream drží; upstreamový npm release běží jen ve `vercel-labs/agent-browser` | Distribuce se vydává tady, ne na npm | Zůstává |
 | `chore(lazurio): release workflow and distribution contract` | `.github/workflows/lazurio-release.yml` a tento dokument | Vydání s atestací, které Machines pinují | Zůstává |
 
@@ -71,7 +72,8 @@ před schválením přečte zpět):
   přepsat ani smazat.
 
 1. `main` je candidate po review a zeleném CI; brána CI jsou joby vydávaných
-   cílů.
+   cílů. Test, který padá, protože se změnil cizí web, dostane deterministickou
+   opravu jako patch v tabulce výše; brána se kvůli němu nevynechává.
 2. Spusť workflow **Lazurio agent-browser Release** (`workflow_dispatch`) se
    vstupy `version` (shodná s `package.json`), `source_sha` (přesná špička
    `main`), `upstream_tag` a `upstream_sha` (přesný commit upstream tagu).

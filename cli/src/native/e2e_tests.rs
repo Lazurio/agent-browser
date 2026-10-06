@@ -1030,6 +1030,37 @@ async fn e2e_stream_command_requires_same_origin_before_daemon_relay() {
 #[tokio::test]
 #[ignore]
 async fn e2e_snapshot_and_click_ref() {
+    // example.com no longer has the heading and link this test reads, and asks
+    // not to be relied on for testing: its former page is served locally.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        for _ in 0..20 {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                break;
+            };
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 8192];
+                let n = stream.read(&mut buf).await.unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]);
+                let body = if request.starts_with("GET /more ") {
+                    "<!doctype html><title>More information</title><h1>More information</h1>"
+                } else {
+                    "<!doctype html><title>Example Domain</title><div><h1>Example Domain</h1>\
+                     <p>This domain is for use in illustrative examples in documents.</p>\
+                     <p><a href=\"/more\">More information...</a></p></div>"
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body,
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.flush().await;
+            });
+        }
+    });
+
     let mut state = DaemonState::new();
 
     let resp = execute_command(
@@ -1040,7 +1071,11 @@ async fn e2e_snapshot_and_click_ref() {
     assert_success(&resp);
 
     let resp = execute_command(
-        &json!({ "id": "2", "action": "navigate", "url": "https://example.com" }),
+        &json!({
+            "id": "2",
+            "action": "navigate",
+            "url": format!("http://127.0.0.1:{}/", port),
+        }),
         &mut state,
     )
     .await;
@@ -1077,13 +1112,14 @@ async fn e2e_snapshot_and_click_ref() {
     assert_success(&resp);
     let url = get_data(&resp)["url"].as_str().unwrap();
     assert!(
-        url.contains("iana.org"),
-        "Should have navigated to iana.org, got: {}",
+        url.ends_with("/more"),
+        "Should have navigated to /more, got: {}",
         url
     );
 
     let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
     assert_success(&resp);
+    server.abort();
 }
 
 // ---------------------------------------------------------------------------
