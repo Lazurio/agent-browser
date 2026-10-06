@@ -1,5 +1,7 @@
 # agent-browser
 
+> **Lazurio distribution.** This is the Lazurio fork of [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser): an exact upstream release plus a small patch stack that Lazurio Remote Environments need before upstream ships it. The patches, why each is carried and when it goes away: [docs/operations/lazurio-fork-release.md](docs/operations/lazurio-fork-release.md). Everything else is upstream's; please report upstream issues there.
+
 Browser automation for AI agents: open pages, read them as an accessibility tree, and act on elements from the shell.
 
 <p>
