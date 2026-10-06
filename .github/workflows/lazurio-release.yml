@@ -1,0 +1,274 @@
+name: Lazurio agent-browser Release
+
+# The Lazurio distribution of agent-browser (docs/operations/lazurio-fork-release.md):
+# builds the exact tip of main, which is an exact upstream release plus the
+# Lazurio patch stack, attests the binaries and, after the environment's
+# approval, publishes an immutable GitHub Release that Lazurio Machines pins by
+# SHA-256. Upstream's npm release workflow does not run in this fork.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: X.Y.Z-lazurio.N, equal to package.json (tag vX.Y.Z-lazurio.N)
+        required: true
+        type: string
+      source_sha:
+        description: Exact 40-character commit at the tip of main
+        required: true
+        type: string
+      upstream_tag:
+        description: Exact upstream release tag the source is based on (vX.Y.Z)
+        required: true
+        type: string
+      upstream_sha:
+        description: Exact 40-character commit of the upstream tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lazurio-release
+  cancel-in-progress: false
+
+env:
+  VERSION: ${{ inputs.version }}
+  RELEASE_TAG: v${{ inputs.version }}
+  SOURCE_SHA: ${{ inputs.source_sha }}
+  UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+  UPSTREAM_SHA: ${{ inputs.upstream_sha }}
+  UPSTREAM_REPOSITORY: https://github.com/vercel-labs/agent-browser.git
+
+jobs:
+  verify:
+    name: Verify source and version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check the shape of the inputs and the dispatch
+        run: |
+          set -euo pipefail
+          # The workflow that holds the publish permissions is main's own, run
+          # at the exact source: a dispatch from another ref never publishes.
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_SHA" = "$SOURCE_SHA"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-lazurio\.[1-9][0-9]*$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$UPSTREAM_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$UPSTREAM_SHA" =~ ^[0-9a-f]{40}$ ]]
+          # The distribution names the upstream release it is built on.
+          [[ "$VERSION" == "${UPSTREAM_TAG#v}-lazurio."* ]]
+
+      - name: Check out the exact source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+
+      - name: The source is the tip of main and sits on the exact upstream release
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse refs/remotes/origin/main)" = "$SOURCE_SHA"
+          git fetch --no-tags "$UPSTREAM_REPOSITORY" \
+            "refs/tags/$UPSTREAM_TAG:refs/tags/upstream-$UPSTREAM_TAG"
+          test "$(git rev-parse "refs/tags/upstream-$UPSTREAM_TAG^{commit}")" = "$UPSTREAM_SHA"
+          git merge-base --is-ancestor "$UPSTREAM_SHA" "$SOURCE_SHA"
+          # Only Lazurio commits on top of it: the first-parent chain is linear.
+          test -z "$(git rev-list --merges "$UPSTREAM_SHA..$SOURCE_SHA")"
+
+      - name: The source names the version
+        run: |
+          set -euo pipefail
+          test "$(node -p "require('./package.json').version")" = "$VERSION"
+          grep -qx "version = \"$VERSION\"" cli/Cargo.toml
+
+      - name: Refuse an existing tag or release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -z "$(git ls-remote origin "refs/tags/$RELEASE_TAG")"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG exists already" >&2
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-24.04
+            rust_target: x86_64-unknown-linux-gnu
+            build_target: x86_64-unknown-linux-gnu.2.28
+            binary: agent-browser-linux-x64
+            use_zigbuild: true
+          - name: macOS ARM64
+            os: macos-14
+            rust_target: aarch64-apple-darwin
+            build_target: aarch64-apple-darwin
+            binary: agent-browser-darwin-arm64
+            use_zigbuild: false
+    steps:
+      - name: Check out the exact source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install npm dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build dashboard
+        run: pnpm --filter dashboard build
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install cargo-zigbuild
+        if: matrix.use_zigbuild
+        run: |
+          pip3 install ziglang
+          cargo install cargo-zigbuild --version 0.23.2 --locked
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+
+      - name: Build with zigbuild
+        if: matrix.use_zigbuild
+        run: cargo zigbuild --release --manifest-path cli/Cargo.toml --target ${{ matrix.build_target }}
+
+      - name: Build with cargo
+        if: '!matrix.use_zigbuild'
+        run: cargo build --release --manifest-path cli/Cargo.toml --target ${{ matrix.rust_target }}
+
+      - name: Copy binary
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cp cli/target/${{ matrix.rust_target }}/release/agent-browser artifacts/${{ matrix.binary }}
+          chmod +x artifacts/${{ matrix.binary }}
+
+      - name: Verify Linux GNU glibc floor
+        if: matrix.binary == 'agent-browser-linux-x64'
+        run: |
+          set -euo pipefail
+          if objdump -p artifacts/${{ matrix.binary }} | grep -E 'GLIBC_2\.([3-9][0-9]|29)'; then
+            echo "ERROR: ${{ matrix.binary }} requires glibc newer than 2.28"
+            exit 1
+          fi
+
+      - name: The binary reports the release version
+        run: |
+          set -euo pipefail
+          reported="$(artifacts/${{ matrix.binary }} --version)"
+          echo "$reported"
+          test "$reported" = "agent-browser $VERSION"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary }}
+          path: artifacts/${{ matrix.binary }}
+          retention-days: 7
+
+  publish:
+    name: Publish release
+    needs: [verify, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: lazurio-agent-browser-release
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - name: Recheck the release source after approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_SHA" = "$SOURCE_SHA"
+          tip="$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)"
+          test "$tip" = "$SOURCE_SHA"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG exists already" >&2
+            exit 1
+          fi
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded
+
+      - name: Collect release assets and checksums
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          for binary in agent-browser-linux-x64 agent-browser-darwin-arm64; do
+            cp "downloaded/$binary/$binary" "release-assets/$binary"
+            chmod +x "release-assets/$binary"
+          done
+          (cd release-assets && sha256sum agent-browser-linux-x64 agent-browser-darwin-arm64 > SHA256SUMS)
+          cat release-assets/SHA256SUMS
+
+      - name: Attest the binaries
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            release-assets/agent-browser-linux-x64
+            release-assets/agent-browser-darwin-arm64
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > notes.md <<NOTES
+          Lazurio distribution of agent-browser: upstream [$UPSTREAM_TAG](https://github.com/vercel-labs/agent-browser/releases/tag/$UPSTREAM_TAG) (\`$UPSTREAM_SHA\`) plus the Lazurio patch stack, built from \`$SOURCE_SHA\`.
+
+          The patches, why each is carried and when it goes away: [docs/operations/lazurio-fork-release.md](https://github.com/$GITHUB_REPOSITORY/blob/$SOURCE_SHA/docs/operations/lazurio-fork-release.md).
+
+          Verify a binary: \`gh attestation verify agent-browser-linux-x64 --repo $GITHUB_REPOSITORY --signer-workflow $GITHUB_REPOSITORY/.github/workflows/lazurio-release.yml --source-digest $SOURCE_SHA\`
+          NOTES
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" \
+            --title "agent-browser $VERSION" \
+            --notes-file notes.md \
+            --prerelease=false \
+            release-assets/agent-browser-linux-x64 \
+            release-assets/agent-browser-darwin-arm64 \
+            release-assets/SHA256SUMS
+
+      - name: The release is immutable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Immutability is a repository setting the approver reads back before
+          # approving (docs/operations/lazurio-fork-release.md); this proves it
+          # took effect. A mutable release fails the run loudly.
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isImmutable --jq .isImmutable)" = "true"
+          test "$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" "refs/tags/$RELEASE_TAG" | cut -f1)" = "$SOURCE_SHA"

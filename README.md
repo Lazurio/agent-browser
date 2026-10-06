@@ -1,5 +1,7 @@
 # agent-browser
 
+> **Lazurio distribution.** This is the Lazurio fork of [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser): an exact upstream release plus a small patch stack that Lazurio Remote Environments need before upstream ships it. The patches, why each is carried and when it goes away: [docs/operations/lazurio-fork-release.md](docs/operations/lazurio-fork-release.md). Everything else is upstream's; please report upstream issues there.
+
 Browser automation CLI for AI agents. Fast native Rust CLI.
 
 [![skills.sh](https://skills.sh/b/vercel-labs/agent-browser)](https://skills.sh/vercel-labs/agent-browser)
