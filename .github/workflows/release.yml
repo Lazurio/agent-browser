@@ -13,6 +13,8 @@ permissions:
 
 jobs:
   check-release:
+    # The Lazurio fork publishes with lazurio-release.yml; npm stays upstream's.
+    if: github.repository == 'vercel-labs/agent-browser'
     name: Check for new version
     runs-on: ubuntu-latest
     timeout-minutes: 5
