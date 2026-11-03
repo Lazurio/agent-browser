@@ -77,8 +77,9 @@ před schválením přečte zpět):
    opravu jako patch v tabulce výše; brána se kvůli němu nevynechává.
 2. Kdo vydání spouští, závisí na tom, jestli už platí nový postup.
    - **Po přepnutí** (prostředí má povinného reviewera `agentrozjedemeai`
-     a Prostředí persony má příjem čekajících vydání z
-     Lazurio/OpenMausBot#93): vydání spouští bot, který ho vlastní, účtem
+     a Prostředí persony běží vydání Lazurio MausBotu
+     s Lazurio/OpenMausBot#93 a `Lazurio/agent-browser`
+     v `OMB_GITHUB_INTAKE_DEPLOYMENTS`): vydání spouští bot, který ho vlastní, účtem
      Organization Admina `immakermatty`, a schvaluje ho persona (rozhodnutí
      Organization Admina z 2026-11-03 k 0218).
    - **Před přepnutím:** jediný reviewer je `immakermatty`
@@ -117,7 +118,11 @@ před schválením přečte zpět):
    bot spustit znovu a persona posoudí každý pokus znovu. Obsahuje-li vydání
    kterýkoli pull request persony od předchozího release tagu, persona běh
    neschválí a nechá ho čekat s komentářem. Před přepnutím schvaluje
-   `immakermatty` běh, který spustil účet persony, se stejnými kontrolami.
+   `immakermatty` běh, který spustil účet persony: spouštějícím účtem
+   i autorem žádosti je tehdy `agentrozjedemeai` (nejnovější komentář
+   `Release dispatch request:` tohoto účtu v issue tohoto repozitáře, napsaný
+   před spuštěním běhu) a ostatní kontroly platí beze změny (workflow, špička
+   `main`, zelené dokončené úlohy, zalogované vstupy rovné žádosti).
 4. Po schválení znovu ověří spuštění a špičku `main`, zapíše `SHA256SUMS`,
    atestuje obě binárky, publikuje release `vX.Y.Z-lazurio.N` s tagem na
    `source_sha` a ověří, že je immutable a tag míří na `source_sha`; jinak
