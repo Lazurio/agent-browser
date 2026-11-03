@@ -60,9 +60,10 @@ zůstává.
 Brány, které drží repozitář (nastavuje je Organization Admin; schvalovatel je
 před schválením přečte zpět):
 
-- prostředí `lazurio-agent-browser-release`: povinný reviewer `immakermatty`,
-  `prevent_self_review: true` (vydání spouští někdo jiný, než kdo ho schvaluje)
-  a nasazení jen z větve `main`:
+- prostředí `lazurio-agent-browser-release`: povinní revieweři `immakermatty`
+  a `agentrozjedemeai` (persona přibude, až její Prostředí bude mít příjem
+  čekajících vydání, viz krok 3), `prevent_self_review: true` (účet, který
+  vydání spustil, ho neschválí) a nasazení jen z větve `main`:
   `gh api repos/Lazurio/agent-browser/environments/lazurio-agent-browser-release`;
 - immutable releases zapnuté:
   `gh api repos/Lazurio/agent-browser/immutable-releases` → `"enabled": true`
@@ -74,14 +75,36 @@ před schválením přečte zpět):
 1. `main` je candidate po review a zeleném CI; brána CI jsou joby vydávaných
    cílů. Test, který padá, protože se změnil cizí web, dostane deterministickou
    opravu jako patch v tabulce výše; brána se kvůli němu nevynechává.
-2. Spusť workflow **Lazurio agent-browser Release** (`workflow_dispatch`) se
-   vstupy `version` (shodná s `package.json`), `source_sha` (přesná špička
-   `main`), `upstream_tag` a `upstream_sha` (přesný commit upstream tagu).
+2. Vydání spouští bot, který ho vlastní, účtem Organization Admina
+   `immakermatty`, a schvaluje ho persona `agentrozjedemeai` (rozhodnutí
+   Organization Admina z 2026-11-03 k 0218). Do issue vydání nejdřív napiš
+   komentář, který začíná `Release dispatch request:` a obsahuje přesný
+   příkaz, a ten pak beze změny spusť:
+
+   ```sh
+   gh workflow run lazurio-release.yml --repo Lazurio/agent-browser --ref main \
+     -f version=<verze shodná s package.json> -f source_sha=<přesná špička main> \
+     -f upstream_tag=<vX.Y.Z> -f upstream_sha=<přesný commit upstream tagu>
+   ```
 3. Workflow odmítne spuštění, které neběží z `refs/heads/main` přesně na
    `source_sha`, ověří, že zdroj je špička `main`, leží nad upstream tagem jen
    lineárními Lazurio commity a nese verzi, sestaví `agent-browser-linux-x64`
    (glibc 2.28) a `agent-browser-darwin-arm64`, ověří, že binárka hlásí verzi
    vydání, a čeká na schválení prostředí `lazurio-agent-browser-release`.
+   Čekající běh přinese personě její GitHub příjem v Lazurio MausBotu
+   (`OMB_GITHUB_INTAKE_DEPLOYMENTS` s `Lazurio/agent-browser`). Persona ho
+   schválí, jen když workflow je `lazurio-release.yml`, běh spustil
+   `immakermatty`, `head_sha` je špička `main`, všechny dokončené úlohy jsou
+   zelené a vstupy zalogované úlohou „Verify source and version“ se rovnají
+   žádosti; rozdíl ve vstupech, jiný commit nebo selhaná úloha znamenají
+   odmítnutí s důvodem, neznámé workflow, jiný spouštějící účet nebo chybějící
+   žádost nechají běh čekat s komentářem. Komentář rozhodnutí začíná
+   `Run <id> attempt <n>:`. Odmítnutý běh se neopakuje; ztracený runner smí
+   bot spustit znovu a persona posoudí každý pokus znovu. Vydání z pull
+   requestu, který napsala persona, persona neschválí a rozhodne Organization
+   Admin. Dokud environment nemá `agentrozjedemeai` jako povinného reviewera
+   a Prostředí persony vydání Lazurio MausBotu s Lazurio/OpenMausBot#93,
+   schvaluje účet `immakermatty` běh, který spustil jiný účet.
 4. Po schválení znovu ověří spuštění a špičku `main`, zapíše `SHA256SUMS`,
    atestuje obě binárky, publikuje release `vX.Y.Z-lazurio.N` s tagem na
    `source_sha` a ověří, že je immutable a tag míří na `source_sha`; jinak
