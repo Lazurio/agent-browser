@@ -230,9 +230,28 @@ jobs:
         with:
           workspaces: cli
 
-      - name: Install Chrome
+      # Lazurio: the e2e tests run on the Chrome for Testing that Environments
+      # run (docs/operations/lazurio-fork-release.md), not on whatever is
+      # stable on the day. `install --with-deps` installs the system packages;
+      # the stable Chrome it downloads too is replaced below.
+      - name: Install Chrome system dependencies
         run: |
           cargo run --manifest-path cli/Cargo.toml -- install --with-deps
+
+      - name: Install the pinned Chrome for Testing
+        env:
+          CHROME_VERSION: 156.0.8078.73
+          CHROME_ZIP_SHA256: c51c24f0126534aaf6d21d1f85b8e243934b3951989dbb59a1f8aab8e32b20c1
+        run: |
+          browsers="$HOME/.agent-browser/browsers"
+          rm -rf "$browsers"/chrome-*
+          zip="$RUNNER_TEMP/chrome-linux64.zip"
+          curl -fsSL -o "$zip" "https://storage.googleapis.com/chrome-for-testing-public/$CHROME_VERSION/linux64/chrome-linux64.zip"
+          echo "$CHROME_ZIP_SHA256  $zip" | sha256sum -c -
+          unzip -q "$zip" -d "$browsers/chrome-$CHROME_VERSION"
+          version=$("$browsers/chrome-$CHROME_VERSION/chrome-linux64/chrome" --version)
+          echo "$version"
+          [[ "$version" == "Google Chrome for Testing $CHROME_VERSION"* ]]
 
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg

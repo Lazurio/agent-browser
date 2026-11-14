@@ -32,11 +32,17 @@ Báze: upstream `v0.43.0` (`1cc19526f3641c8543d55aa6700e7c55b37ac356`).
 Předchozí báze `v0.37.0` (`471ab3852b47b98847f1d9c855c272bb62d0d50b`) byla
 verze, kterou Machines nasazovaly před forkem.
 
+Podporovaný Chrome: Chrome for Testing `156.0.8078.73` (linux64), stejná
+binárka, jakou spouští prohlížeč Environmentu. CI na ní pouští native e2e
+testy (patch `ci(lazurio): native e2e on the Chrome for Testing that
+Environments run`).
+
 | Commit | Co opravuje | Proč ho nese Lazurio | Kdy zmizí |
 | --- | --- | --- | --- |
 | `ci(lazurio): the CI of the shipped targets` | Upstreamové CI ve forku netestuje Windows (matice `rust-cross` a `global-install` bez `windows-latest`, `windows-integration` jen ve `vercel-labs/agent-browser`) | Distribuce vydává jen linux-x64 a darwin-arm64; upstreamový job `Rust (windows-latest)` na `v0.43.0` padá na dvou testech `session_settings` (běh 43312165338) a díky `fail-fast` s sebou zruší i macOS joby | Až distribuce začne vydávat Windows |
 | `chore(lazurio): distribution version …` | Verze `X.Y.Z-lazurio.N` všude, kde ji upstream drží; upstreamový npm release běží jen ve `vercel-labs/agent-browser` | Distribuce se vydává tady, ne na npm | Zůstává |
 | `chore(lazurio): release workflow and distribution contract` | `.github/workflows/lazurio-release.yml` a tento dokument | Vydání s atestací, které Machines pinují | Zůstává |
+| `ci(lazurio): native e2e on the Chrome for Testing that Environments run` | Job `Native E2E Tests` instaloval nejnovější stabilní Chrome for Testing, od 2026-11-09 verzi 157. Chrome 157 zrušil feature `WebMCPTesting`, kterým agent-browser zapíná `document.modelContext`, takže pět testů WebMCP nenajde nástroje (vercel-labs/agent-browser#2513). Na `Runtime.evaluate` v pozastaveném cross-origin iframu před prvním dokumentem už neodpoví hned chybou, ale čeká, takže `--allowed-domains` se stránkou s cross-origin iframy doběhne do 10s limitu (`e2e_domain_filter_navigates_page_with_cross_origin_iframes`). Job teď instaluje Chrome for Testing `156.0.8078.73` ověřený SHA-256 | Brána CI má testovat Chrome, se kterým distribuce běží; nejnovější stable mění výsledek bez změny v repozitáři | Zůstává, dokud Environmenty pinují verzi Chromu; posune se s Chromem Environmentů (Lazurio/LazurioPlatform#978). Na Chrome 157 se smí posunout až s upstreamovou opravou obou míst (WebMCP: vercel-labs/agent-browser#2516, zatím nevydaná; iframy s `--allowed-domains`: upstreamové hlášení zatím není) |
 
 Odešlé patche (upstream je vydal, distribuce je od báze `v0.43.0` nenese):
 
@@ -77,8 +83,9 @@ před schválením přečte zpět):
   přepsat ani smazat.
 
 1. `main` je candidate po review a zeleném CI; brána CI jsou joby vydávaných
-   cílů. Test, který padá, protože se změnil cizí web, dostane deterministickou
-   opravu jako patch v tabulce výše; brána se kvůli němu nevynechává.
+   cílů. Test, který padá kvůli změně mimo repozitář (cizí web, nová verze
+   Chromu), dostane deterministickou opravu jako patch v tabulce výše; brána
+   se kvůli němu nevynechává.
 2. Kdo vydání spouští, závisí na tom, jestli už platí nový postup.
    - **Po přepnutí** (prostředí má povinného reviewera `agentrozjedemeai`
      a Prostředí persony běží vydání Lazurio MausBotu
