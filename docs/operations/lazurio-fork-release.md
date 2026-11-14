@@ -34,6 +34,7 @@ verze, kterou Machines nasazovaly před forkem.
 
 | Commit | Co opravuje | Proč ho nese Lazurio | Kdy zmizí |
 | --- | --- | --- | --- |
+| `ci(lazurio): the CI of the shipped targets` | Upstreamové CI ve forku netestuje Windows (matice `rust-cross` a `global-install` bez `windows-latest`, `windows-integration` jen ve `vercel-labs/agent-browser`) | Distribuce vydává jen linux-x64 a darwin-arm64; upstreamový job `Rust (windows-latest)` na `v0.43.0` padá na dvou testech `session_settings` (běh 43312165338) a díky `fail-fast` s sebou zruší i macOS joby | Až distribuce začne vydávat Windows |
 | `chore(lazurio): distribution version …` | Verze `X.Y.Z-lazurio.N` všude, kde ji upstream drží; upstreamový npm release běží jen ve `vercel-labs/agent-browser` | Distribuce se vydává tady, ne na npm | Zůstává |
 | `chore(lazurio): release workflow and distribution contract` | `.github/workflows/lazurio-release.yml` a tento dokument | Vydání s atestací, které Machines pinují | Zůstává |
 
