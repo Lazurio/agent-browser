@@ -430,7 +430,12 @@ jobs:
         shell: pwsh
 
       - name: Verify skills resolve from the linked binary
-        run: agent-browser skills list | grep -qE '^[[:space:]]*core[[:space:]]'
+        # The list is read whole before it is searched: `grep -q` closing the
+        # pipe at its first match made agent-browser's later write fail with
+        # SIGPIPE, which `pipefail` turned into exit 141 on macOS.
+        run: |
+          agent-browser skills list > "$RUNNER_TEMP/skills.txt"
+          grep -qE '^[[:space:]]*core[[:space:]]' "$RUNNER_TEMP/skills.txt"
         shell: bash
 
       - name: Verify uninstall removes the linked bin entry
