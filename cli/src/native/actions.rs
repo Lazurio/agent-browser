@@ -3002,11 +3002,19 @@ async fn execute_command_flow(cmd: &Value, state: &mut DaemonState) -> Value {
     resp
 }
 
+/// Lazurio distribution: the outdated-Chrome check runs only when
+/// `AGENT_BROWSER_VERSION_CHECK` is `1` or `true`. Updating the Chrome of an
+/// Environment is Lazurio's job, so an agent cannot act on the warning, and
+/// the check would fetch chromereleases.googleblog.com from every daemon.
+/// `AGENT_BROWSER_NO_VERSION_CHECK=1` keeps it off.
+fn browser_version_check_enabled() -> bool {
+    let set = |name: &str| env::var(name).is_ok_and(|v| v == "1" || v == "true");
+    set("AGENT_BROWSER_VERSION_CHECK") && !set("AGENT_BROWSER_NO_VERSION_CHECK")
+}
+
 /// Adds a warning to the response when the connected browser is outdated with known CVEs. Checks each browser product once and never fails.
 async fn warn_if_browser_outdated(state: &mut DaemonState, response: &mut Value) {
-    let disabled =
-        env::var("AGENT_BROWSER_NO_VERSION_CHECK").is_ok_and(|v| v == "1" || v == "true");
-    if state.active_provider_connection || disabled {
+    if state.active_provider_connection || !browser_version_check_enabled() {
         return;
     }
     let Some(mgr) = state.browser.as_mut() else {
@@ -15648,7 +15656,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn outdated_check_is_off_unless_asked_for() {
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "AGENT_BROWSER_VERSION_CHECK",
+            "AGENT_BROWSER_NO_VERSION_CHECK",
+        ]);
+        guard.remove("AGENT_BROWSER_VERSION_CHECK");
+        guard.remove("AGENT_BROWSER_NO_VERSION_CHECK");
+        let (url, calls) = version_server().await;
+        let mut state = super::DaemonState::new();
+        let mut response = serde_json::json!({});
+        let client = crate::native::cdp::client::CdpClient::connect(&url)
+            .await
+            .unwrap();
+        state.browser = Some(super::BrowserManager::for_test(client, url.clone()));
+        super::warn_if_browser_outdated(&mut state, &mut response).await;
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(response, serde_json::json!({}));
+
+        guard.set("AGENT_BROWSER_VERSION_CHECK", "0");
+        assert!(!super::browser_version_check_enabled());
+        guard.set("AGENT_BROWSER_VERSION_CHECK", "true");
+        assert!(super::browser_version_check_enabled());
+        guard.set("AGENT_BROWSER_VERSION_CHECK", "1");
+        assert!(super::browser_version_check_enabled());
+        guard.set("AGENT_BROWSER_NO_VERSION_CHECK", "1");
+        assert!(!super::browser_version_check_enabled());
+    }
+
+    #[tokio::test]
     async fn outdated_check_reads_the_product_once_per_connection() {
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "AGENT_BROWSER_VERSION_CHECK",
+            "AGENT_BROWSER_NO_VERSION_CHECK",
+        ]);
+        guard.set("AGENT_BROWSER_VERSION_CHECK", "1");
+        guard.remove("AGENT_BROWSER_NO_VERSION_CHECK");
         let (url, calls) = version_server().await;
         let mut state = super::DaemonState::new();
         let mut response = serde_json::json!({});
