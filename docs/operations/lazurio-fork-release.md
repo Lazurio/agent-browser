@@ -25,6 +25,13 @@ Stejně jako `Lazurio/t3code` a `Lazurio/OpenMausBot` (HumanAndMachine-ai
   první nahrazení `main` z upstream commitu
   `6d3e22c673a44271d0c213c2fef722e0aeba627d` (upstream `main` při založení
   forku), ověřeného těsně před zápisem jako předka čerstvého upstream `main`.
+  Druhou úlevou je výjimka Organization Admina z 2026-11-14 pro refresh na
+  `v0.43.0` (Lazurio/agent-browser#3): starý `main`
+  `90a9a7f293841230f640c6911d4cef543be00ed2` byl o tři commity
+  `docs(lazurio)` dál než tag `v0.37.0-lazurio.1`, všechny tři jsou
+  přenesené do kandidáta a mezivydání `0.37.0-lazurio.2` by vydalo stejnou
+  binárku jen kvůli tagu. `main` proto smí nahradit kandidát bez něj.
+  Ostatní podmínky platí beze změny.
 
 ## Aktuální báze a patche
 
@@ -108,7 +115,10 @@ před schválením přečte zpět):
    Do issue tohoto repozitáře, ke kterému vydání patří, nejdřív napiš
    spouštějícím účtem komentář, který začíná `Release dispatch request:`
    a obsahuje přesný příkaz s doslovnými hodnotami (ne proměnnými shellu),
-   a ten pak beze změny spusť:
+   a ten pak beze změny spusť. Dokud má repozitář vypnuté issues, patří
+   žádost do konverzace pull requestu kandidáta, ze kterého vydání vzniká
+   (pull request je na GitHubu také issue); „issue tohoto repozitáře“ níže
+   znamená tento pull request:
 
    ```text
    Release dispatch request:
